@@ -20,7 +20,7 @@ const char* severityLabel(int level) {
 
 const char* severityColor(int level) {
     (void)level;
-    return tui::color::WHITE;
+    return Tui::Color::WHITE;
 }
 
 std::string Patient::summary() const {
@@ -39,24 +39,24 @@ std::string Patient::csvHeader() {
 std::string Patient::toCSV() const {
     std::ostringstream out;
     out << id_
-        << "|" << csv::escape(name_)
+        << "|" << CsvCodec::escape(name_)
         << "|" << age_
         << "|" << sex_
-        << "|" << csv::escape(contact_)
-        << "|" << csv::escape(address_)
+        << "|" << CsvCodec::escape(contact_)
+        << "|" << CsvCodec::escape(address_)
         << "|" << severity_
         << "|" << static_cast<long long>(arrival_)
         << "|" << (senior_ ? 1 : 0)
         << "|" << (pwd_ ? 1 : 0)
         << "|" << (philhealth_ ? 1 : 0)
-        << "|" << csv::escape(promoCode_)
+        << "|" << CsvCodec::escape(promoCode_)
         << "|" << bedId_
         << "|" << doctorId_;
     return out.str();
 }
 
 Patient Patient::fromCSV(const std::string& line) {
-    auto fields = csv::split(line);
+    auto fields = CsvCodec::split(line);
     if (fields.size() < 14)
         throw FileException("patient row has too few fields");
     Patient p;

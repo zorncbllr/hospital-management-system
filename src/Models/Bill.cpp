@@ -40,7 +40,7 @@ std::string Bill::toCSV() const {
         << "|" << patientId_
         << "|" << static_cast<long long>(date_)
         << "|" << subtotal_
-        << "|" << csv::escape(discountApplied_)
+        << "|" << CsvCodec::escape(discountApplied_)
         << "|" << discountAmount_
         << "|" << total_
         << "|" << statusStr
@@ -49,7 +49,7 @@ std::string Bill::toCSV() const {
         const auto& item = items_[i];
         if (i > 0) out << ";";
         out << toString(item.category) << "#"
-            << csv::escape(item.description) << "#"
+            << CsvCodec::escape(item.description) << "#"
             << item.quantity << "#"
             << item.unitPrice;
     }
@@ -75,7 +75,7 @@ static BillStatus parseBillStatus(const std::string& text) {
 }
 
 Bill Bill::fromCSV(const std::string& line) {
-    auto fields = csv::split(line);
+    auto fields = CsvCodec::split(line);
     if (fields.size() < 8)
         throw FileException("bill row has too few fields");
     Bill b;

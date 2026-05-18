@@ -1,14 +1,15 @@
 #include <hms/Core/Tui.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
 
-namespace hms::tui {
+namespace hms {
 
-static std::size_t visibleLen(const std::string& s) {
+std::size_t Tui::visibleLen(const std::string& s) {
     std::size_t len = 0;
     bool inEsc = false;
     for (unsigned char c : s) {
@@ -17,32 +18,31 @@ static std::size_t visibleLen(const std::string& s) {
             if (c == 'm') inEsc = false;
             continue;
         }
-        // Skip UTF-8 continuation bytes (10xxxxxx) so multi-byte chars count as 1
         if ((c & 0xC0) != 0x80) ++len;
     }
     return len;
 }
 
-std::string repeat(const std::string& s, int n) {
+std::string Tui::repeat(const std::string& s, int n) {
     std::string out;
     out.reserve(s.size() * static_cast<std::size_t>(std::max(0, n)));
     for (int i = 0; i < n; ++i) out += s;
     return out;
 }
 
-std::string padRight(const std::string& s, std::size_t width) {
+std::string Tui::padRight(const std::string& s, std::size_t width) {
     std::size_t len = visibleLen(s);
     if (len >= width) return s;
     return s + std::string(width - len, ' ');
 }
 
-std::string padLeft(const std::string& s, std::size_t width) {
+std::string Tui::padLeft(const std::string& s, std::size_t width) {
     std::size_t len = visibleLen(s);
     if (len >= width) return s;
     return std::string(width - len, ' ') + s;
 }
 
-std::string center(const std::string& s, std::size_t width) {
+std::string Tui::center(const std::string& s, std::size_t width) {
     std::size_t len = visibleLen(s);
     if (len >= width) return s;
     std::size_t total = width - len;
@@ -51,66 +51,57 @@ std::string center(const std::string& s, std::size_t width) {
     return std::string(left, ' ') + s + std::string(right, ' ');
 }
 
-void clearScreen() {
+void Tui::clearScreen() {
     std::cout << "\033[2J\033[H" << std::flush;
 }
 
-void pause(const std::string& msg) {
-    std::cout << color::DIM << msg << color::RESET << std::flush;
+void Tui::pause(const std::string& msg) {
+    std::cout << Color::DIM << msg << Color::RESET << std::flush;
     std::string dummy;
     std::getline(std::cin, dummy);
 }
 
-static const int BOX_WIDTH = 64;
-
-static void hLine(char left, char fill, char right, int width) {
-    std::cout << left;
-    for (int i = 0; i < width - 2; ++i) std::cout << fill;
-    std::cout << right << "\n";
-}
-
-static void boxTop(int width = BOX_WIDTH) {
-    std::cout << color::WHITE << "╔";
+void Tui::boxTop(int width) {
+    std::cout << Color::WHITE << "╔";
     for (int i = 0; i < width - 2; ++i) std::cout << "═";
-    std::cout << "╗" << color::RESET << "\n";
-    (void)hLine;
+    std::cout << "╗" << Color::RESET << "\n";
 }
 
-static void boxMid(int width = BOX_WIDTH) {
-    std::cout << color::WHITE << "╠";
+void Tui::boxMid(int width) {
+    std::cout << Color::WHITE << "╠";
     for (int i = 0; i < width - 2; ++i) std::cout << "═";
-    std::cout << "╣" << color::RESET << "\n";
+    std::cout << "╣" << Color::RESET << "\n";
 }
 
-static void boxBottom(int width = BOX_WIDTH) {
-    std::cout << color::WHITE << "╚";
+void Tui::boxBottom(int width) {
+    std::cout << Color::WHITE << "╚";
     for (int i = 0; i < width - 2; ++i) std::cout << "═";
-    std::cout << "╝" << color::RESET << "\n";
+    std::cout << "╝" << Color::RESET << "\n";
 }
 
-static void boxRow(const std::string& content, int width = BOX_WIDTH) {
+void Tui::boxRow(const std::string& content, int width) {
     int inner = width - 2;
-    std::cout << color::WHITE << "║" << color::RESET
+    std::cout << Color::WHITE << "║" << Color::RESET
               << padRight(content, static_cast<std::size_t>(inner))
-              << color::WHITE << "║" << color::RESET << "\n";
+              << Color::WHITE << "║" << Color::RESET << "\n";
 }
 
-static void boxRowCentered(const std::string& content, int width = BOX_WIDTH) {
+void Tui::boxRowCentered(const std::string& content, int width) {
     int inner = width - 2;
-    std::cout << color::WHITE << "║" << color::RESET
+    std::cout << Color::WHITE << "║" << Color::RESET
               << center(content, static_cast<std::size_t>(inner))
-              << color::WHITE << "║" << color::RESET << "\n";
+              << Color::WHITE << "║" << Color::RESET << "\n";
 }
 
-void banner(const std::string& title, const std::string& subtitle,
-            const std::vector<std::string>& breadcrumbPath) {
+void Tui::banner(const std::string& title, const std::string& subtitle,
+                 const std::vector<std::string>& breadcrumbPath) {
     static const std::string APP_TITLE = "HOSPITAL MANAGEMENT SYSTEM";
     int w = BOX_WIDTH;
     w = std::max(w, static_cast<int>(visibleLen(APP_TITLE) + 4));
     w = std::max(w, static_cast<int>(visibleLen(title) + 4));
 
     boxTop(w);
-    boxRowCentered(std::string(color::BOLD) + APP_TITLE + color::RESET, w);
+    boxRowCentered(std::string(Color::BOLD) + APP_TITLE + Color::RESET, w);
     if (!breadcrumbPath.empty()) {
         boxMid(w);
         std::string crumb = "  ";
@@ -118,19 +109,19 @@ void banner(const std::string& title, const std::string& subtitle,
             if (i > 0) crumb += " › ";
             crumb += breadcrumbPath[i];
         }
-        boxRow(std::string(color::DIM) + crumb + color::RESET, w);
+        boxRow(std::string(Color::DIM) + crumb + Color::RESET, w);
     }
     boxMid(w);
-    boxRowCentered(std::string(color::BOLD) + title + color::RESET, w);
+    boxRowCentered(std::string(Color::BOLD) + title + Color::RESET, w);
     if (!subtitle.empty()) {
-        boxRowCentered(std::string(color::DIM) + subtitle + color::RESET, w);
+        boxRowCentered(std::string(Color::DIM) + subtitle + Color::RESET, w);
     }
     boxBottom(w);
 }
 
-int tableBoxWidth(const std::vector<std::string>& headers,
-                  const std::vector<std::vector<std::string>>& rows,
-                  const std::string& tableTitle) {
+int Tui::tableBoxWidth(const std::vector<std::string>& headers,
+                       const std::vector<std::vector<std::string>>& rows,
+                       const std::string& tableTitle) {
     if (headers.empty()) return BOX_WIDTH;
     const int N = static_cast<int>(headers.size());
     std::vector<std::size_t> widths(static_cast<std::size_t>(N), 0);
@@ -148,8 +139,8 @@ int tableBoxWidth(const std::vector<std::string>& headers,
     return static_cast<int>(inner) + 2;
 }
 
-int bannerOpen(const std::string& title, const std::string& subtitle,
-               const std::vector<std::string>& breadcrumbPath, int minWidth) {
+int Tui::bannerOpen(const std::string& title, const std::string& subtitle,
+                    const std::vector<std::string>& breadcrumbPath, int minWidth) {
     static const std::string APP_TITLE = "HOSPITAL MANAGEMENT SYSTEM";
     int w = BOX_WIDTH;
     w = std::max(w, static_cast<int>(visibleLen(APP_TITLE)) + 4);
@@ -157,7 +148,7 @@ int bannerOpen(const std::string& title, const std::string& subtitle,
     if (minWidth > 0) w = std::max(w, minWidth);
 
     boxTop(w);
-    boxRowCentered(std::string(color::BOLD) + APP_TITLE + color::RESET, w);
+    boxRowCentered(std::string(Color::BOLD) + APP_TITLE + Color::RESET, w);
     if (!breadcrumbPath.empty()) {
         boxMid(w);
         std::string crumb = "  ";
@@ -165,20 +156,20 @@ int bannerOpen(const std::string& title, const std::string& subtitle,
             if (i > 0) crumb += " › ";
             crumb += breadcrumbPath[i];
         }
-        boxRow(std::string(color::DIM) + crumb + color::RESET, w);
+        boxRow(std::string(Color::DIM) + crumb + Color::RESET, w);
     }
     boxMid(w);
-    boxRowCentered(std::string(color::BOLD) + title + color::RESET, w);
+    boxRowCentered(std::string(Color::BOLD) + title + Color::RESET, w);
     if (!subtitle.empty())
-        boxRowCentered(std::string(color::DIM) + subtitle + color::RESET, w);
+        boxRowCentered(std::string(Color::DIM) + subtitle + Color::RESET, w);
     return w;
 }
 
-void tableInBox(int boxWidth,
-                const std::vector<std::string>& headers,
-                const std::vector<std::vector<std::string>>& rows,
-                const std::string& sectionTitle,
-                bool closeBox) {
+void Tui::tableInBox(int boxWidth,
+                     const std::vector<std::string>& headers,
+                     const std::vector<std::vector<std::string>>& rows,
+                     const std::string& sectionTitle,
+                     bool closeBox) {
     if (headers.empty()) { boxBottom(boxWidth); return; }
     const int N = static_cast<int>(headers.size());
     const std::size_t innerWidth = static_cast<std::size_t>(boxWidth - 2);
@@ -198,49 +189,49 @@ void tableInBox(int boxWidth,
         widths[static_cast<std::size_t>(N - 1)] += innerWidth - natInner;
 
     auto colSep = [&](const char* left, const char* mid, const char* right) {
-        std::cout << color::WHITE << left;
+        std::cout << Color::WHITE << left;
         for (int i = 0; i < N; ++i) {
             for (std::size_t j = 0; j < widths[static_cast<std::size_t>(i)] + 2; ++j)
                 std::cout << "═";
             std::cout << (i < N - 1 ? mid : right);
         }
-        std::cout << color::RESET << "\n";
+        std::cout << Color::RESET << "\n";
     };
     auto headerRow = [&]() {
-        std::cout << color::WHITE << "║" << color::RESET;
+        std::cout << Color::WHITE << "║" << Color::RESET;
         for (int i = 0; i < N; ++i) {
-            std::cout << " " << color::BOLD
+            std::cout << " " << Color::BOLD
                       << padRight(headers[static_cast<std::size_t>(i)],
                                   widths[static_cast<std::size_t>(i)])
-                      << color::RESET << " ";
-            std::cout << color::WHITE << (i < N - 1 ? "│" : "║") << color::RESET;
+                      << Color::RESET << " ";
+            std::cout << Color::WHITE << (i < N - 1 ? "│" : "║") << Color::RESET;
         }
         std::cout << "\n";
     };
     auto dataRow = [&](const std::vector<std::string>& row) {
-        std::cout << color::WHITE << "║" << color::RESET;
+        std::cout << Color::WHITE << "║" << Color::RESET;
         for (int i = 0; i < N; ++i) {
             std::string cell = (i < static_cast<int>(row.size()))
                 ? row[static_cast<std::size_t>(i)] : std::string("");
             std::cout << " " << padRight(cell, widths[static_cast<std::size_t>(i)]) << " ";
-            std::cout << color::WHITE << (i < N - 1 ? "│" : "║") << color::RESET;
+            std::cout << Color::WHITE << (i < N - 1 ? "│" : "║") << Color::RESET;
         }
         std::cout << "\n";
     };
 
     if (!sectionTitle.empty()) {
-        std::cout << color::WHITE << "║" << color::RESET
-                  << padRight(" " + std::string(color::BOLD) + sectionTitle + color::RESET,
+        std::cout << Color::WHITE << "║" << Color::RESET
+                  << padRight(" " + std::string(Color::BOLD) + sectionTitle + Color::RESET,
                               innerWidth)
-                  << color::WHITE << "║" << color::RESET << "\n";
+                  << Color::WHITE << "║" << Color::RESET << "\n";
     }
     colSep("╠", "╤", "╣");
     headerRow();
     colSep("╠", "╪", "╣");
     if (rows.empty()) {
-        std::cout << color::WHITE << "║" << color::RESET
+        std::cout << Color::WHITE << "║" << Color::RESET
                   << center(" (no records) ", innerWidth)
-                  << color::WHITE << "║" << color::RESET << "\n";
+                  << Color::WHITE << "║" << Color::RESET << "\n";
     } else {
         for (const auto& row : rows) dataRow(row);
     }
@@ -248,40 +239,40 @@ void tableInBox(int boxWidth,
     else          colSep("╠", "╧", "╣");
 }
 
-void sectionHeader(const std::string& title) {
-    std::cout << "\n" << color::BOLD << color::WHITE
-              << "▶ " << title << color::RESET << "\n"
-              << color::DIM
+void Tui::sectionHeader(const std::string& title) {
+    std::cout << "\n" << Color::BOLD << Color::WHITE
+              << "▶ " << title << Color::RESET << "\n"
+              << Color::DIM
               << repeat("─", static_cast<int>(title.size()) + 2)
-              << color::RESET << "\n";
+              << Color::RESET << "\n";
 }
 
-void hintBar(const std::vector<std::string>& hints) {
-    std::cout << color::DIM << "  ";
+void Tui::hintBar(const std::vector<std::string>& hints) {
+    std::cout << Color::DIM << "  ";
     for (std::size_t i = 0; i < hints.size(); ++i) {
         if (i > 0) std::cout << "   ";
         std::cout << hints[i];
     }
-    std::cout << color::RESET << "\n";
+    std::cout << Color::RESET << "\n";
 }
 
-void toast(const std::string& message, Level level) {
+void Tui::toast(const std::string& message, Level level) {
     const char* prefix = " ";
-    const char* col = color::WHITE;
+    const char* col = Color::WHITE;
     switch (level) {
-        case Level::Info:    prefix = "[i]"; col = color::WHITE; break;
-        case Level::Success: prefix = "[✓]"; col = color::WHITE; break;
-        case Level::Warning: prefix = "[!]"; col = color::WHITE; break;
-        case Level::Error:   prefix = "[x]"; col = color::WHITE; break;
+        case Level::Info:    prefix = "[i]"; col = Color::WHITE; break;
+        case Level::Success: prefix = "[✓]"; col = Color::WHITE; break;
+        case Level::Warning: prefix = "[!]"; col = Color::WHITE; break;
+        case Level::Error:   prefix = "[x]"; col = Color::WHITE; break;
     }
     std::cout << "\n  " << col << prefix << " " << message
-              << color::RESET << "\n\n";
+              << Color::RESET << "\n\n";
 }
 
-bool confirm(const std::string& message) {
+bool Tui::confirm(const std::string& message) {
     while (true) {
-        std::cout << "\n  " << color::WHITE << "[?] " << message
-                  << " (y/n): " << color::RESET << std::flush;
+        std::cout << "\n  " << Color::WHITE << "[?] " << message
+                  << " (y/n): " << Color::RESET << std::flush;
         std::string ans;
         std::getline(std::cin, ans);
         if (ans.empty()) {
@@ -295,10 +286,10 @@ bool confirm(const std::string& message) {
     }
 }
 
-char menu(const std::string& title,
-          const std::vector<std::string>& breadcrumbPath,
-          const std::vector<MenuOption>& options,
-          const std::string& footnote) {
+char Tui::menu(const std::string& title,
+               const std::vector<std::string>& breadcrumbPath,
+               const std::vector<MenuOption>& options,
+               const std::string& footnote) {
     std::size_t labelColumn = 0;
     for (const auto& opt : options) {
         labelColumn = std::max(labelColumn,
@@ -321,7 +312,7 @@ char menu(const std::string& title,
     while (true) {
         clearScreen();
         boxTop(boxWidth);
-        boxRowCentered(std::string(color::BOLD) + APP_TITLE + color::RESET, boxWidth);
+        boxRowCentered(std::string(Color::BOLD) + APP_TITLE + Color::RESET, boxWidth);
         if (!breadcrumbPath.empty()) {
             boxMid(boxWidth);
             std::string crumb = "  ";
@@ -329,10 +320,10 @@ char menu(const std::string& title,
                 if (i > 0) crumb += " › ";
                 crumb += breadcrumbPath[i];
             }
-            boxRow(std::string(color::DIM) + crumb + color::RESET, boxWidth);
+            boxRow(std::string(Color::DIM) + crumb + Color::RESET, boxWidth);
         }
         boxMid(boxWidth);
-        boxRowCentered(std::string(color::BOLD) + title + color::RESET, boxWidth);
+        boxRowCentered(std::string(Color::BOLD) + title + Color::RESET, boxWidth);
         boxMid(boxWidth);
         for (const auto& opt : options) {
             std::string keyTag = std::string("  [") + opt.key + "]  ";
@@ -341,7 +332,7 @@ char menu(const std::string& title,
                 std::size_t cur = visibleLen(line);
                 std::size_t target = labelColumn + 2;
                 std::size_t padLen = (target > cur) ? (target - cur) : 2;
-                line += std::string(padLen, ' ') + color::DIM + opt.hint + color::RESET;
+                line += std::string(padLen, ' ') + Color::DIM + opt.hint + Color::RESET;
             }
             boxRow(line, boxWidth);
         }
@@ -351,13 +342,13 @@ char menu(const std::string& title,
             if (i > 0) keysHint += " / ";
             keysHint += std::string("[") + options[i].key + "]";
         }
-        boxRow(std::string(color::DIM) + keysHint + color::RESET, boxWidth);
+        boxRow(std::string(Color::DIM) + keysHint + Color::RESET, boxWidth);
         boxBottom(boxWidth);
         if (!footnote.empty()) {
-            std::cout << color::DIM << "  " << footnote
-                      << color::RESET << "\n";
+            std::cout << Color::DIM << "  " << footnote
+                      << Color::RESET << "\n";
         }
-        std::cout << "\n  " << color::BOLD << "Choose > " << color::RESET
+        std::cout << "\n  " << Color::BOLD << "Choose > " << Color::RESET
                   << std::flush;
 
         std::string input;
@@ -374,9 +365,9 @@ char menu(const std::string& title,
     }
 }
 
-void table(const std::vector<std::string>& headers,
-           const std::vector<std::vector<std::string>>& rows,
-           const std::string& title) {
+void Tui::table(const std::vector<std::string>& headers,
+                const std::vector<std::vector<std::string>>& rows,
+                const std::string& title) {
     if (headers.empty()) return;
     const int N = static_cast<int>(headers.size());
 
@@ -389,11 +380,9 @@ void table(const std::vector<std::string>& headers,
                 widths[static_cast<std::size_t>(i)],
                 visibleLen(row[static_cast<std::size_t>(i)]));
 
-    // innerWidth = total chars between the left and right ║
-    std::size_t innerWidth = static_cast<std::size_t>(N - 1); // col-sep chars
+    std::size_t innerWidth = static_cast<std::size_t>(N - 1);
     for (auto w : widths) innerWidth += w + 2;
 
-    // If title provided, ensure innerWidth is wide enough for it
     if (!title.empty()) {
         std::size_t needed = visibleLen(title) + 2;
         if (needed > innerWidth) {
@@ -408,71 +397,71 @@ void table(const std::vector<std::string>& headers,
     }
 
     auto topWithSep = [&]() {
-        std::cout << color::WHITE << "╔";
+        std::cout << Color::WHITE << "╔";
         for (int i = 0; i < N; ++i) {
             for (std::size_t j = 0; j < widths[static_cast<std::size_t>(i)] + 2; ++j)
                 std::cout << "═";
             std::cout << (i < N - 1 ? "╤" : "╗");
         }
-        std::cout << color::RESET << "\n";
+        std::cout << Color::RESET << "\n";
     };
     auto topNoSep = [&]() {
-        std::cout << color::WHITE << "╔";
+        std::cout << Color::WHITE << "╔";
         for (std::size_t j = 0; j < innerWidth; ++j) std::cout << "═";
-        std::cout << "╗" << color::RESET << "\n";
+        std::cout << "╗" << Color::RESET << "\n";
     };
     auto midWithSep = [&]() {
-        std::cout << color::WHITE << "╠";
+        std::cout << Color::WHITE << "╠";
         for (int i = 0; i < N; ++i) {
             for (std::size_t j = 0; j < widths[static_cast<std::size_t>(i)] + 2; ++j)
                 std::cout << "═";
             std::cout << (i < N - 1 ? "╪" : "╣");
         }
-        std::cout << color::RESET << "\n";
+        std::cout << Color::RESET << "\n";
     };
     auto midIntroSep = [&]() {
-        std::cout << color::WHITE << "╠";
+        std::cout << Color::WHITE << "╠";
         for (int i = 0; i < N; ++i) {
             for (std::size_t j = 0; j < widths[static_cast<std::size_t>(i)] + 2; ++j)
                 std::cout << "═";
             std::cout << (i < N - 1 ? "╤" : "╣");
         }
-        std::cout << color::RESET << "\n";
+        std::cout << Color::RESET << "\n";
     };
     auto botLine = [&]() {
-        std::cout << color::WHITE << "╚";
+        std::cout << Color::WHITE << "╚";
         for (int i = 0; i < N; ++i) {
             for (std::size_t j = 0; j < widths[static_cast<std::size_t>(i)] + 2; ++j)
                 std::cout << "═";
             std::cout << (i < N - 1 ? "╧" : "╝");
         }
-        std::cout << color::RESET << "\n";
+        std::cout << Color::RESET << "\n";
     };
     auto headerRow = [&]() {
-        std::cout << color::WHITE << "║" << color::RESET;
+        std::cout << Color::WHITE << "║" << Color::RESET;
         for (int i = 0; i < N; ++i) {
-            std::cout << " " << color::BOLD
+            std::cout << " " << Color::BOLD
                       << padRight(headers[static_cast<std::size_t>(i)],
                                   widths[static_cast<std::size_t>(i)])
-                      << color::RESET << " ";
-            std::cout << color::WHITE << (i < N - 1 ? "│" : "║") << color::RESET;
+                      << Color::RESET << " ";
+            std::cout << Color::WHITE << (i < N - 1 ? "│" : "║") << Color::RESET;
         }
         std::cout << "\n";
     };
     auto dataRow = [&](const std::vector<std::string>& row) {
-        std::cout << color::WHITE << "║" << color::RESET;
+        std::cout << Color::WHITE << "║" << Color::RESET;
         for (int i = 0; i < N; ++i) {
             std::string cell = (i < static_cast<int>(row.size()))
                 ? row[static_cast<std::size_t>(i)] : std::string("");
             std::cout << " " << padRight(cell, widths[static_cast<std::size_t>(i)]) << " ";
-            std::cout << color::WHITE << (i < N - 1 ? "│" : "║") << color::RESET;
+            std::cout << Color::WHITE << (i < N - 1 ? "│" : "║") << Color::RESET;
         }
         std::cout << "\n";
     };
     auto titleRow = [&](const std::string& t) {
-        std::cout << color::WHITE << "║" << color::RESET
-                  << padRight(" " + std::string(color::BOLD) + t + color::RESET, innerWidth)
-                  << color::WHITE << "║" << color::RESET << "\n";
+        std::cout << Color::WHITE << "║" << Color::RESET
+                  << padRight(" " + std::string(Color::BOLD) + t + Color::RESET, innerWidth)
+                  << Color::WHITE << "║" << Color::RESET << "\n";
     };
 
     std::cout << "\n";
@@ -486,27 +475,24 @@ void table(const std::vector<std::string>& headers,
     headerRow();
     midWithSep();
     if (rows.empty()) {
-        std::cout << color::WHITE << "║" << color::RESET
+        std::cout << Color::WHITE << "║" << Color::RESET
                   << center(" (no records) ", innerWidth)
-                  << color::WHITE << "║" << color::RESET << "\n";
+                  << Color::WHITE << "║" << Color::RESET << "\n";
     } else {
         for (const auto& row : rows) dataRow(row);
     }
     botLine();
 }
 
-void bar(double ratio, int width) {
+void Tui::bar(double ratio, int width) {
     if (ratio < 0) ratio = 0;
     if (ratio > 1) ratio = 1;
     int filled = static_cast<int>(ratio * width + 0.5);
-    const char* col = color::WHITE;
-    if (ratio >= 0.85) col = color::WHITE;
-    else if (ratio >= 0.6) col = color::WHITE;
-    std::cout << col;
+    std::cout << Color::WHITE;
     for (int i = 0; i < filled; ++i) std::cout << "█";
-    std::cout << color::DIM;
+    std::cout << Color::DIM;
     for (int i = filled; i < width; ++i) std::cout << "░";
-    std::cout << color::RESET;
+    std::cout << Color::RESET;
 }
 
 }

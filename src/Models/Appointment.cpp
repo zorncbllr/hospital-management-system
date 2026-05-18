@@ -18,7 +18,7 @@ std::string toString(AppointmentStatus status) {
 
 const char* statusColor(AppointmentStatus status) {
     (void)status;
-    return tui::color::WHITE;
+    return Tui::Color::WHITE;
 }
 
 std::string Appointment::csvHeader() {
@@ -34,12 +34,12 @@ std::string Appointment::toCSV() const {
         << "|" << startMinutes_
         << "|" << endMinutes_
         << "|" << static_cast<int>(status_)
-        << "|" << csv::escape(reason_);
+        << "|" << CsvCodec::escape(reason_);
     return out.str();
 }
 
 Appointment Appointment::fromCSV(const std::string& line) {
-    auto fields = csv::split(line);
+    auto fields = CsvCodec::split(line);
     if (fields.size() < 8)
         throw FileException("appointment row has too few fields");
     Appointment a;

@@ -12,43 +12,42 @@
 #include <sstream>
 #include <string>
 
-namespace hms::validation {
+namespace hms {
 
-std::string trim(const std::string& s) {
+std::string Validator::trim(const std::string& s) {
     std::size_t b = 0, e = s.size();
     while (b < e && std::isspace(static_cast<unsigned char>(s[b]))) ++b;
     while (e > b && std::isspace(static_cast<unsigned char>(s[e - 1]))) --e;
     return s.substr(b, e - b);
 }
 
-bool isBlank(const std::string& s) {
+bool Validator::isBlank(const std::string& s) {
     for (char c : s) if (!std::isspace(static_cast<unsigned char>(c))) return false;
     return true;
 }
 
-static bool isCancel(const std::string& s) {
+bool Validator::isCancel(const std::string& s) {
     std::string t = trim(s);
     return t == "c" || t == "C";
 }
 
-static std::string prompt(const std::string& label) {
-    std::cout << "  " << tui::color::BOLD << label << tui::color::RESET
-              << " " << tui::color::DIM << "(c to cancel)" << tui::color::RESET
+std::string Validator::prompt(const std::string& label) {
+    std::cout << "  " << Tui::Color::BOLD << label << Tui::Color::RESET
+              << " " << Tui::Color::DIM << "(c to cancel)" << Tui::Color::RESET
               << " > " << std::flush;
     std::string line;
     if (!std::getline(std::cin, line)) {
-        // EOF on stdin — treat like cancel rather than spinning forever
         throw CancelledException();
     }
     if (isCancel(line)) throw CancelledException();
     return trim(line);
 }
 
-int readInt(const std::string& label, int min, int max) {
+int Validator::readInt(const std::string& label, int min, int max) {
     while (true) {
         std::string s = prompt(label);
         if (s.empty()) {
-            tui::toast("Value required.", tui::Level::Warning);
+            tui_.toast("Value required.", Tui::Level::Warning);
             continue;
         }
         try {
@@ -56,23 +55,23 @@ int readInt(const std::string& label, int min, int max) {
             int v = std::stoi(s, &pos);
             if (pos != s.size()) throw std::invalid_argument("trailing");
             if (v < min || v > max) {
-                tui::toast("Enter a number between " + std::to_string(min) +
+                tui_.toast("Enter a number between " + std::to_string(min) +
                            " and " + std::to_string(max) + ".",
-                           tui::Level::Warning);
+                           Tui::Level::Warning);
                 continue;
             }
             return v;
         } catch (const std::exception&) {
-            tui::toast("Not a valid number.", tui::Level::Warning);
+            tui_.toast("Not a valid number.", Tui::Level::Warning);
         }
     }
 }
 
-double readDouble(const std::string& label, double min, double max) {
+double Validator::readDouble(const std::string& label, double min, double max) {
     while (true) {
         std::string s = prompt(label);
         if (s.empty()) {
-            tui::toast("Value required.", tui::Level::Warning);
+            tui_.toast("Value required.", Tui::Level::Warning);
             continue;
         }
         try {
@@ -82,40 +81,40 @@ double readDouble(const std::string& label, double min, double max) {
             if (v < min || v > max) {
                 std::ostringstream oss;
                 oss << "Enter a number between " << min << " and " << max << ".";
-                tui::toast(oss.str(), tui::Level::Warning);
+                tui_.toast(oss.str(), Tui::Level::Warning);
                 continue;
             }
             return v;
         } catch (const std::exception&) {
-            tui::toast("Not a valid number.", tui::Level::Warning);
+            tui_.toast("Not a valid number.", Tui::Level::Warning);
         }
     }
 }
 
-std::string readLine(const std::string& label, bool allowEmpty) {
+std::string Validator::readLine(const std::string& label, bool allowEmpty) {
     while (true) {
         std::string s = prompt(label);
         if (s.empty() && !allowEmpty) {
-            tui::toast("Value required.", tui::Level::Warning);
+            tui_.toast("Value required.", Tui::Level::Warning);
             continue;
         }
         return s;
     }
 }
 
-std::string readNonEmpty(const std::string& label) {
+std::string Validator::readNonEmpty(const std::string& label) {
     return readLine(label, false);
 }
 
-std::string readName(const std::string& label) {
+std::string Validator::readName(const std::string& label) {
     while (true) {
         std::string s = prompt(label);
         if (s.empty()) {
-            tui::toast("Name is required.", tui::Level::Warning);
+            tui_.toast("Name is required.", Tui::Level::Warning);
             continue;
         }
         if (s.size() < 2) {
-            tui::toast("Name must be at least 2 characters.", tui::Level::Warning);
+            tui_.toast("Name must be at least 2 characters.", Tui::Level::Warning);
             continue;
         }
         bool valid = true;
@@ -127,18 +126,18 @@ std::string readName(const std::string& label) {
             }
         }
         if (!valid) {
-            tui::toast("Name must contain only letters, spaces, hyphens, apostrophes, and periods.", tui::Level::Warning);
+            tui_.toast("Name must contain only letters, spaces, hyphens, apostrophes, and periods.", Tui::Level::Warning);
             continue;
         }
         return s;
     }
 }
 
-std::string readContact(const std::string& label) {
+std::string Validator::readContact(const std::string& label) {
     while (true) {
         std::string s = prompt(label + " (09XXXXXXXXX)");
         if (s.empty()) {
-            tui::toast("Contact number required.", tui::Level::Warning);
+            tui_.toast("Contact number required.", Tui::Level::Warning);
             continue;
         }
         std::string digits;
@@ -148,71 +147,71 @@ std::string readContact(const std::string& label) {
             }
         }
         if (digits.size() != 11) {
-            tui::toast("Contact number must be exactly 11 digits.", tui::Level::Warning);
+            tui_.toast("Contact number must be exactly 11 digits.", Tui::Level::Warning);
             continue;
         }
         if (digits[0] != '0' || digits[1] != '9') {
-            tui::toast("Contact number must start with 09.", tui::Level::Warning);
+            tui_.toast("Contact number must start with 09.", Tui::Level::Warning);
             continue;
         }
         return digits;
     }
 }
 
-std::string readAddress(const std::string& label) {
+std::string Validator::readAddress(const std::string& label) {
     while (true) {
         std::string s = prompt(label);
         if (s.empty()) {
-            tui::toast("Address required.", tui::Level::Warning);
+            tui_.toast("Address required.", Tui::Level::Warning);
             continue;
         }
         if (s.size() < 10) {
-            tui::toast("Address is too short (minimum 10 characters).", tui::Level::Warning);
+            tui_.toast("Address is too short (minimum 10 characters).", Tui::Level::Warning);
             continue;
         }
         if (s.size() > 200) {
-            tui::toast("Address is too long (maximum 200 characters).", tui::Level::Warning);
+            tui_.toast("Address is too long (maximum 200 characters).", Tui::Level::Warning);
             continue;
         }
         return s;
     }
 }
 
-std::string readRoom(const std::string& label) {
+std::string Validator::readRoom(const std::string& label) {
     while (true) {
         std::string s = prompt(label);
         if (s.empty()) {
-            tui::toast("Consulting room required.", tui::Level::Warning);
+            tui_.toast("Consulting room required.", Tui::Level::Warning);
             continue;
         }
         if (s.size() < 3) {
-            tui::toast("Consulting room must be at least 3 characters.", tui::Level::Warning);
+            tui_.toast("Consulting room must be at least 3 characters.", Tui::Level::Warning);
             continue;
         }
         return s;
     }
 }
 
-std::string readSpecialty(const std::string& label) {
+std::string Validator::readSpecialty(const std::string& label) {
     while (true) {
         std::string s = prompt(label);
         if (s.empty()) {
-            tui::toast("Specialty required.", tui::Level::Warning);
+            tui_.toast("Specialty required.", Tui::Level::Warning);
             continue;
         }
         if (s.size() < 3) {
-            tui::toast("Specialty must be at least 3 characters.", tui::Level::Warning);
+            tui_.toast("Specialty must be at least 3 characters.", Tui::Level::Warning);
             continue;
         }
         return s;
     }
 }
 
-char readChar(const std::string& label, const std::string& allowed) {
+char Validator::readChar(const std::string& label, const std::string& allowed) {
     while (true) {
         std::string s = prompt(label);
         if (s.size() != 1) {
-            tui::toast("Enter one of: " + allowed, tui::Level::Warning);
+            tui_.toast("Enter one of: " + allowed, Tui::Level::Warning);
             continue;
         }
         char c = static_cast<char>(std::toupper(static_cast<unsigned char>(s[0])));
@@ -220,11 +219,11 @@ char readChar(const std::string& label, const std::string& allowed) {
             char au = static_cast<char>(std::toupper(static_cast<unsigned char>(a)));
             if (c == au) return c;
         }
-        tui::toast("Enter one of: " + allowed, tui::Level::Warning);
+        tui_.toast("Enter one of: " + allowed, Tui::Level::Warning);
     }
 }
 
-std::time_t parseDate(const std::string& s) {
+std::time_t Validator::parseDate(const std::string& s) {
     if (s.size() != 10 || s[4] != '-' || s[7] != '-')
         throw InvalidInputException("date must be YYYY-MM-DD");
     int y, m, d;
@@ -254,22 +253,22 @@ std::time_t parseDate(const std::string& s) {
     return t;
 }
 
-std::time_t readDate(const std::string& label) {
+std::time_t Validator::readDate(const std::string& label) {
     while (true) {
         std::string s = prompt(label + " (YYYY-MM-DD)");
         if (s.empty()) {
-            tui::toast("Date required.", tui::Level::Warning);
+            tui_.toast("Date required.", Tui::Level::Warning);
             continue;
         }
         try {
             return parseDate(s);
         } catch (const InvalidInputException& e) {
-            tui::toast(e.what(), tui::Level::Warning);
+            tui_.toast(e.what(), Tui::Level::Warning);
         }
     }
 }
 
-int parseTime(const std::string& s) {
+int Validator::parseTime(const std::string& s) {
     std::string trimmed = trim(s);
     if (trimmed.empty())
         throw InvalidInputException("time must be like 1:00 AM or 1:00 PM");
@@ -324,22 +323,22 @@ int parseTime(const std::string& s) {
     return h * 3600 + m * 60;
 }
 
-int readTimeOfDay(const std::string& label) {
+int Validator::readTimeOfDay(const std::string& label) {
     while (true) {
         std::string s = prompt(label + " (e.g., 1:00 AM)");
         if (s.empty()) {
-            tui::toast("Time required.", tui::Level::Warning);
+            tui_.toast("Time required.", Tui::Level::Warning);
             continue;
         }
         try {
             return parseTime(s);
         } catch (const InvalidInputException& e) {
-            tui::toast(e.what(), tui::Level::Warning);
+            tui_.toast(e.what(), Tui::Level::Warning);
         }
     }
 }
 
-std::string formatDate(std::time_t t) {
+std::string Validator::formatDate(std::time_t t) {
     std::tm tm{};
 #ifdef _WIN32
     localtime_s(&tm, &t);
@@ -352,7 +351,7 @@ std::string formatDate(std::time_t t) {
     return buf;
 }
 
-std::string formatDateTime(std::time_t t) {
+std::string Validator::formatDateTime(std::time_t t) {
     std::tm tm{};
 #ifdef _WIN32
     localtime_s(&tm, &t);
@@ -366,7 +365,7 @@ std::string formatDateTime(std::time_t t) {
     return buf;
 }
 
-std::string formatTime(int secondsOfDay) {
+std::string Validator::formatTime(int secondsOfDay) {
     int h = (secondsOfDay / 3600) % 24;
     int m = (secondsOfDay / 60) % 60;
     std::string period = (h >= 12) ? "PM" : "AM";
@@ -377,7 +376,7 @@ std::string formatTime(int secondsOfDay) {
     return buf;
 }
 
-std::time_t today() {
+std::time_t Validator::today() {
     std::time_t t = std::time(nullptr);
     std::tm tm{};
 #ifdef _WIN32
@@ -391,15 +390,15 @@ std::time_t today() {
     return std::mktime(&tm);
 }
 
-std::time_t now() {
+std::time_t Validator::now() {
     return std::time(nullptr);
 }
 
-int readDuration(const std::string& label, int minMinutes, int maxMinutes) {
+int Validator::readDuration(const std::string& label, int minMinutes, int maxMinutes) {
     while (true) {
         std::string s = prompt(label + " (e.g., 2:30 or 30)");
         if (s.empty()) {
-            tui::toast("Duration required.", tui::Level::Warning);
+            tui_.toast("Duration required.", Tui::Level::Warning);
             continue;
         }
 
@@ -415,17 +414,17 @@ int readDuration(const std::string& label, int minMinutes, int maxMinutes) {
                 h = std::stoi(hourStr);
                 m = std::stoi(minStr);
             } catch (...) {
-                tui::toast("Invalid duration format. Use H:MM (e.g., 2:30) or minutes (e.g., 30).",
-                           tui::Level::Warning);
+                tui_.toast("Invalid duration format. Use H:MM (e.g., 2:30) or minutes (e.g., 30).",
+                           Tui::Level::Warning);
                 continue;
             }
 
             if (h < 0 || h > 23) {
-                tui::toast("Hours must be between 0 and 23.", tui::Level::Warning);
+                tui_.toast("Hours must be between 0 and 23.", Tui::Level::Warning);
                 continue;
             }
             if (m < 0 || m > 59) {
-                tui::toast("Minutes must be between 0 and 59.", tui::Level::Warning);
+                tui_.toast("Minutes must be between 0 and 59.", Tui::Level::Warning);
                 continue;
             }
 
@@ -435,12 +434,12 @@ int readDuration(const std::string& label, int minMinutes, int maxMinutes) {
                 std::size_t pos = 0;
                 totalMinutes = std::stoi(s, &pos);
                 if (pos != s.size()) {
-                    tui::toast("Invalid number.", tui::Level::Warning);
+                    tui_.toast("Invalid number.", Tui::Level::Warning);
                     continue;
                 }
             } catch (...) {
-                tui::toast("Invalid duration format. Use H:MM (e.g., 2:30) or minutes (e.g., 30).",
-                           tui::Level::Warning);
+                tui_.toast("Invalid duration format. Use H:MM (e.g., 2:30) or minutes (e.g., 30).",
+                           Tui::Level::Warning);
                 continue;
             }
         }
@@ -448,7 +447,7 @@ int readDuration(const std::string& label, int minMinutes, int maxMinutes) {
         if (totalMinutes < minMinutes || totalMinutes > maxMinutes) {
             std::ostringstream oss;
             oss << "Duration must be between " << minMinutes << " and " << maxMinutes << " minutes.";
-            tui::toast(oss.str(), tui::Level::Warning);
+            tui_.toast(oss.str(), Tui::Level::Warning);
             continue;
         }
 

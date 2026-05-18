@@ -96,7 +96,7 @@ void Hospital::seedBeds() {
 }
 
 void Hospital::seedMedicines() {
-    std::time_t day = validation::today();
+    std::time_t day = Validator::today();
     auto inDays = [&](int days) { return day + days * 86400LL; };
 
     medicines_.push_back(Medicine("PAR500", "Paracetamol 500mg",  120, 30,  2.50,  inDays(180)));

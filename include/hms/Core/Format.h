@@ -5,13 +5,18 @@
 #include <sstream>
 #include <string>
 
-namespace hms::format {
+namespace hms {
 
-inline std::string money(double value) {
-    std::ostringstream out;
-    out << "P" << std::fixed << std::setprecision(2) << value;
-    return out.str();
-}
+class Formatter {
+public:
+    Formatter() = delete;
+
+    static std::string money(double value) {
+        std::ostringstream out;
+        out << "P" << std::fixed << std::setprecision(2) << value;
+        return out.str();
+    }
+};
 
 }
 

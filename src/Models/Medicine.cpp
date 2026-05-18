@@ -12,8 +12,8 @@ std::string Medicine::csvHeader() {
 
 std::string Medicine::toCSV() const {
     std::ostringstream out;
-    out << csv::escape(sku_)
-        << "|" << csv::escape(name_)
+    out << CsvCodec::escape(sku_)
+        << "|" << CsvCodec::escape(name_)
         << "|" << stock_
         << "|" << reorderLevel_
         << "|" << unitPrice_
@@ -22,7 +22,7 @@ std::string Medicine::toCSV() const {
 }
 
 Medicine Medicine::fromCSV(const std::string& line) {
-    auto fields = csv::split(line);
+    auto fields = CsvCodec::split(line);
     if (fields.size() < 6)
         throw FileException("medicine row has too few fields");
     Medicine m;

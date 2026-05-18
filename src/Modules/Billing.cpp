@@ -15,11 +15,10 @@
 #include <sstream>
 #include <vector>
 
-namespace hms::billing {
+namespace hms {
 
-namespace {
 
-static std::string toString(BillStatus status) {
+std::string BillingModule::billStatusName(BillStatus status) {
     switch (status) {
         case BillStatus::Unpaid:  return "Unpaid";
         case BillStatus::Paid:    return "Paid";
@@ -28,25 +27,16 @@ static std::string toString(BillStatus status) {
     return "Unpaid";
 }
 
-void logAudit(const std::string& dataDir, const std::string& action, const std::string& details) {
+void BillingModule::logAudit(const std::string& dataDir, const std::string& action, const std::string& details) {
     std::ofstream log(dataDir + "/audit.log", std::ios::app);
     if (log.is_open()) {
-        std::time_t now = validation::now();
-        log << validation::formatDateTime(now) << " | "
+        std::time_t now = Validator::now();
+        log << Validator::formatDateTime(now) << " | "
             << action << " | " << details << "\n";
     }
 }
 
-constexpr double DISCOUNT_CAP_PERCENT = 0.50;
-
-struct DiscountOption {
-    std::string code;
-    std::string label;
-    std::string group;
-    double percent;
-};
-
-std::vector<DiscountOption> eligibleDiscounts(
+std::vector<BillingModule::DiscountOption> BillingModule::eligibleDiscounts(
     const Patient& patient, double subtotal) {
     std::vector<DiscountOption> options;
     if (patient.hasPhilHealth()) {
@@ -74,12 +64,7 @@ std::vector<DiscountOption> eligibleDiscounts(
     return options;
 }
 
-struct DiscountPlan {
-    std::vector<DiscountOption> picked;
-    double totalAmount = 0.0;
-};
-
-DiscountPlan optimalDiscountPlan(
+BillingModule::DiscountPlan BillingModule::optimalDiscountPlan(
     const std::vector<DiscountOption>& options,
     double subtotal) {
 
@@ -145,11 +130,11 @@ DiscountPlan optimalDiscountPlan(
     return plan;
 }
 
-void addRoomCharges(const Hospital& hospital, const Patient& patient,
+void BillingModule::addRoomCharges(const Patient& patient,
                     Bill& bill) {
     if (!patient.isAdmitted()) return;
-    std::time_t today = validation::today();
-    for (const auto& bed : hospital.beds()) {
+    std::time_t today = Validator::today();
+    for (const auto& bed : hospital_.beds()) {
         if (bed.occupantId() != patient.id()) continue;
         int days = bed.daysOccupied(today);
         BillItem item;
@@ -162,10 +147,10 @@ void addRoomCharges(const Hospital& hospital, const Patient& patient,
     }
 }
 
-void addDoctorFee(const Hospital& hospital, const Patient& patient,
+void BillingModule::addDoctorFee(const Patient& patient,
                   Bill& bill) {
     if (!patient.hasDoctor()) return;
-    for (const auto& doctor : hospital.doctors()) {
+    for (const auto& doctor : hospital_.doctors()) {
         if (doctor.id() != patient.doctorId()) continue;
         BillItem item;
         item.category    = ChargeCategory::DoctorFee;
@@ -177,17 +162,17 @@ void addDoctorFee(const Hospital& hospital, const Patient& patient,
     }
 }
 
-void addManualItems(Bill& bill) {
-    std::cout << "\n  " << tui::color::DIM
+void BillingModule::addManualItems(Bill& bill) {
+    std::cout << "\n  " << Tui::Color::DIM
               << "Add procedures / extra items. Enter 0 quantity to stop."
-              << tui::color::RESET << "\n";
+              << Tui::Color::RESET << "\n";
     while (true) {
-        std::string description = validation::readLine(
+        std::string description = validation_.readLine(
             "Description (blank to stop)", true);
         if (description.empty()) break;
-        int qty = validation::readInt("Quantity", 0, 1000);
+        int qty = validation_.readInt("Quantity", 0, 1000);
         if (qty == 0) break;
-        double price = validation::readDouble("Unit price",
+        double price = validation_.readDouble("Unit price",
                                               0.0, 1000000.0);
         BillItem item;
         item.category    = ChargeCategory::Procedure;
@@ -198,9 +183,9 @@ void addManualItems(Bill& bill) {
     }
 }
 
-void printReceipt(const Patient& patient,
+void BillingModule::printReceipt(const Patient& patient,
                   const Bill& bill, const DiscountPlan& plan) {
-    tui::clearScreen();
+    tui_.clearScreen();
 
     std::vector<std::string> headers{ "Category", "Description", "Qty", "Unit", "Amount" };
     std::vector<std::vector<std::string>> rows;
@@ -209,21 +194,21 @@ void printReceipt(const Patient& patient,
             toString(item.category),
             item.description,
             std::to_string(item.quantity),
-            format::money(item.unitPrice),
-            format::money(item.subtotal()),
+            Formatter::money(item.unitPrice),
+            Formatter::money(item.subtotal()),
         });
     }
     std::string billHeader = "Bill #" + std::to_string(bill.id()) +
-                             "   " + validation::formatDate(bill.date()) +
+                             "   " + Validator::formatDate(bill.date()) +
                              "   " + patient.name() +
-                             "   [" + toString(bill.status()) + "]";
-    int bw = tui::bannerOpen("OFFICIAL RECEIPT", "optimal discount combination applied", {},
-                             tui::tableBoxWidth(headers, rows, billHeader));
-    tui::tableInBox(bw, headers, rows, billHeader);
+                             "   [" + billStatusName(bill.status()) + "]";
+    int bw = tui_.bannerOpen("OFFICIAL RECEIPT", "optimal discount combination applied", {},
+                             tui_.tableBoxWidth(headers, rows, billHeader));
+    tui_.tableInBox(bw, headers, rows, billHeader);
 
     std::vector<std::string> sHeaders{"Description", "Amount"};
     std::vector<std::vector<std::string>> sRows;
-    sRows.push_back({"Subtotal", format::money(bill.subtotal())});
+    sRows.push_back({"Subtotal", Formatter::money(bill.subtotal())});
 
     if (!plan.picked.empty()) {
         sRows.push_back({"", ""});
@@ -234,73 +219,73 @@ void printReceipt(const Patient& patient,
             sRows.push_back({
                 "  - " + option.label + " (" + option.group + ", " +
                     std::to_string(static_cast<int>(option.percent * 100)) + "%)",
-                "-" + format::money(amount),
+                "-" + Formatter::money(amount),
             });
         }
-        sRows.push_back({"Total discount", "-" + format::money(plan.totalAmount)});
+        sRows.push_back({"Total discount", "-" + Formatter::money(plan.totalAmount)});
     } else {
         sRows.push_back({"", ""});
         sRows.push_back({"No discounts available", ""});
     }
 
     sRows.push_back({"", ""});
-    sRows.push_back({std::string(tui::color::BOLD) + "AMOUNT DUE" + tui::color::RESET,
-                     std::string(tui::color::BOLD) + format::money(bill.total()) + tui::color::RESET});
+    sRows.push_back({std::string(Tui::Color::BOLD) + "AMOUNT DUE" + Tui::Color::RESET,
+                     std::string(Tui::Color::BOLD) + Formatter::money(bill.total()) + Tui::Color::RESET});
 
-    int sw = tui::bannerOpen("OFFICIAL RECEIPT", "optimal discount combination applied", {},
-                             tui::tableBoxWidth(sHeaders, sRows, billHeader));
-    tui::tableInBox(sw, sHeaders, sRows, billHeader);
+    int sw = tui_.bannerOpen("OFFICIAL RECEIPT", "optimal discount combination applied", {},
+                             tui_.tableBoxWidth(sHeaders, sRows, billHeader));
+    tui_.tableInBox(sw, sHeaders, sRows, billHeader);
     std::cout << "\n";
 }
 
-void newBill(Hospital& hospital) {
-    if (hospital.patients().empty())
+void BillingModule::newBill() {
+    if (hospital_.patients().empty())
         throw NotFoundException("no patients in the system");
 
-    tui::clearScreen();
-    tui::banner("CREATE BILL", "itemise charges and apply best discount", {"Home", "Billing", "New Bill"});
+    tui_.clearScreen();
+    tui_.banner("CREATE BILL", "itemise charges and apply best discount", {"Home", "Billing", "New Bill"});
     std::cout << "\n";
 
     std::vector<std::string> pHeaders{"ID", "Name", "Age", "Sex", "Status"};
     std::vector<std::vector<std::string>> pRows;
-    for (const auto& p : hospital.patients()) {
+    for (const auto& p : hospital_.patients()) {
         std::string sx = (p.sex() == 'M' || p.sex() == 'm') ? "Male" : "Female";
         std::string st = p.isAdmitted() ? "admitted" : p.hasDoctor() ? "with doctor" : "waiting";
         pRows.push_back({
             std::to_string(p.id()), p.name(), std::to_string(p.age()), sx, st,
         });
     }
-    int pw = tui::bannerOpen("SELECT PATIENT", "",
+    int pw = tui_.bannerOpen("SELECT PATIENT", "",
                              {"Home", "Billing", "New Bill"},
-                             tui::tableBoxWidth(pHeaders, pRows));
-    tui::tableInBox(pw, pHeaders, pRows);
+                             tui_.tableBoxWidth(pHeaders, pRows));
+    tui_.tableInBox(pw, pHeaders, pRows);
     std::cout << "\n";
-    int patientId = validation::readInt("Patient id", 1, 1000000);
-    Patient* patient = hospital.findPatient(patientId);
+    int patientId = validation_.readInt("Patient id", 1, 1000000);
+    Patient* patient = hospital_.findPatient(patientId);
     if (!patient) throw NotFoundException("patient #" + std::to_string(patientId));
 
-    for (const auto& existing : hospital.bills()) {
+    for (const auto& existing : hospital_.bills()) {
         if (existing.patientId() == patientId && existing.status() == BillStatus::Unpaid) {
-            tui::toast("This patient already has an unpaid bill (bill #" +
+            tui_.toast("This patient already has an unpaid bill (bill #" +
                        std::to_string(existing.id()) + ", " +
-                       format::money(existing.total()) + "). "
+                       Formatter::money(existing.total()) + "). "
                        "Please settle or void it before creating a new one.",
-                       tui::Level::Warning);
-            tui::pause();
+                       Tui::Level::Warning);
+            tui_.pause();
             return;
         }
     }
 
-    Bill bill(hospital.nextBillId(), patientId, validation::now());
+    Bill bill(hospital_.nextBillId(), patientId, Validator::now());
 
-    addRoomCharges(hospital, *patient, bill);
-    addDoctorFee(hospital, *patient, bill);
+    addRoomCharges(*patient, bill);
+    addDoctorFee(*patient, bill);
     addManualItems(bill);
 
     if (bill.subtotal() <= 0.0) {
-        tui::toast("No charges entered. Bill not created.",
-                   tui::Level::Warning);
-        tui::pause();
+        tui_.toast("No charges entered. Bill not created.",
+                   Tui::Level::Warning);
+        tui_.pause();
         return;
     }
 
@@ -316,57 +301,57 @@ void newBill(Hospital& hospital) {
 
     printReceipt(*patient, bill, plan);
 
-    if (!tui::confirm("Save this bill?")) {
-        tui::toast("Discarded.", tui::Level::Info);
-        tui::pause();
+    if (!tui_.confirm("Save this bill?")) {
+        tui_.toast("Discarded.", Tui::Level::Info);
+        tui_.pause();
         return;
     }
 
-    hospital.bills().push_back(bill);
-    hospital.saveAll();
-    logAudit(hospital.dataDir(), "BILL_CREATED",
+    hospital_.bills().push_back(bill);
+    hospital_.saveAll();
+    logAudit(hospital_.dataDir(), "BILL_CREATED",
              "id=" + std::to_string(bill.id()) + " patient=" + patient->name() +
              " total=" + std::to_string(bill.total()));
-    tui::toast("Bill saved.", tui::Level::Success);
-    tui::pause();
+    tui_.toast("Bill saved.", Tui::Level::Success);
+    tui_.pause();
 }
 
-void viewBill(Hospital& hospital) {
-    tui::clearScreen();
-    tui::banner("VIEW BILL", "", {"Home", "Billing", "View"});
+void BillingModule::viewBill() {
+    tui_.clearScreen();
+    tui_.banner("VIEW BILL", "", {"Home", "Billing", "View"});
     std::cout << "\n";
 
-    if (hospital.bills().empty()) {
-        tui::toast("No bills in the system.", tui::Level::Info);
-        tui::pause();
+    if (hospital_.bills().empty()) {
+        tui_.toast("No bills in the system.", Tui::Level::Info);
+        tui_.pause();
         return;
     }
     std::vector<std::string> bHeaders{"ID", "Date", "Patient", "Total"};
     std::vector<std::vector<std::string>> bRows;
-    for (const auto& b : hospital.bills()) {
-        Patient* p = hospital.findPatient(b.patientId());
+    for (const auto& b : hospital_.bills()) {
+        Patient* p = hospital_.findPatient(b.patientId());
         std::ostringstream totalStr;
         totalStr << "P" << std::fixed << std::setprecision(2) << b.total();
         bRows.push_back({
             std::to_string(b.id()),
-            validation::formatDate(b.date()),
+            Validator::formatDate(b.date()),
             p ? p->name() : "#" + std::to_string(b.patientId()),
             totalStr.str(),
         });
     }
-    int bw = tui::bannerOpen("SELECT BILL", "",
+    int bw = tui_.bannerOpen("SELECT BILL", "",
                              {"Home", "Billing", "View"},
-                             tui::tableBoxWidth(bHeaders, bRows));
-    tui::tableInBox(bw, bHeaders, bRows);
+                             tui_.tableBoxWidth(bHeaders, bRows));
+    tui_.tableInBox(bw, bHeaders, bRows);
     std::cout << "\n";
-    int billId = validation::readInt("Bill id", 1, 1000000);
-    for (const auto& bill : hospital.bills()) {
+    int billId = validation_.readInt("Bill id", 1, 1000000);
+    for (const auto& bill : hospital_.bills()) {
         if (bill.id() != billId) continue;
-        Patient* patient = hospital.findPatient(bill.patientId());
+        Patient* patient = hospital_.findPatient(bill.patientId());
         if (!patient) {
-            tui::toast("Patient record for this bill has been deleted. Showing bill details without patient info.",
-                       tui::Level::Warning);
-            tui::pause();
+            tui_.toast("Patient record for this bill has been deleted. Showing bill details without patient info.",
+                       Tui::Level::Warning);
+            tui_.pause();
             return;
         }
 
@@ -376,71 +361,71 @@ void viewBill(Hospital& hospital) {
             plan.totalAmount = bill.discountAmount();
         }
         printReceipt(*patient, bill, plan);
-        tui::pause();
+        tui_.pause();
         return;
     }
     throw NotFoundException("bill #" + std::to_string(billId));
 }
 
-void listBills(Hospital& hospital) {
-    tui::clearScreen();
+void BillingModule::listBills() {
+    tui_.clearScreen();
 
     std::vector<std::string> headers{ "Bill", "Date", "Patient", "Subtotal", "Discount", "Total", "Status" };
     std::vector<std::vector<std::string>> rows;
-    for (const auto& bill : hospital.bills()) {
-        Patient* patient = hospital.findPatient(bill.patientId());
+    for (const auto& bill : hospital_.bills()) {
+        Patient* patient = hospital_.findPatient(bill.patientId());
         rows.push_back({
             "#" + std::to_string(bill.id()),
-            validation::formatDate(bill.date()),
+            Validator::formatDate(bill.date()),
             patient ? patient->name() : ("#" + std::to_string(bill.patientId())),
-            format::money(bill.subtotal()),
-            format::money(bill.discountAmount()),
-            format::money(bill.total()),
-            toString(bill.status()),
+            Formatter::money(bill.subtotal()),
+            Formatter::money(bill.discountAmount()),
+            Formatter::money(bill.total()),
+            billStatusName(bill.status()),
         });
     }
-    int bw = tui::bannerOpen("ALL BILLS", "", {"Home", "Billing", "List"},
-                             tui::tableBoxWidth(headers, rows));
-    tui::tableInBox(bw, headers, rows);
+    int bw = tui_.bannerOpen("ALL BILLS", "", {"Home", "Billing", "List"},
+                             tui_.tableBoxWidth(headers, rows));
+    tui_.tableInBox(bw, headers, rows);
     std::cout << "\n";
-    tui::pause();
+    tui_.pause();
 }
 
-void updateBillStatus(Hospital& hospital) {
-    tui::clearScreen();
-    tui::banner("UPDATE BILL STATUS", "", {"Home", "Billing", "Update Status"});
+void BillingModule::updateBillStatus() {
+    tui_.clearScreen();
+    tui_.banner("UPDATE BILL STATUS", "", {"Home", "Billing", "Update Status"});
     std::cout << "\n";
 
-    if (hospital.bills().empty()) {
-        tui::toast("No bills in the system.", tui::Level::Info);
-        tui::pause();
+    if (hospital_.bills().empty()) {
+        tui_.toast("No bills in the system.", Tui::Level::Info);
+        tui_.pause();
         return;
     }
     std::vector<std::string> bHeaders{"ID", "Date", "Patient", "Total", "Status"};
     std::vector<std::vector<std::string>> bRows;
-    for (const auto& b : hospital.bills()) {
-        Patient* p = hospital.findPatient(b.patientId());
+    for (const auto& b : hospital_.bills()) {
+        Patient* p = hospital_.findPatient(b.patientId());
         bRows.push_back({
             std::to_string(b.id()),
-            validation::formatDate(b.date()),
+            Validator::formatDate(b.date()),
             p ? p->name() : "#" + std::to_string(b.patientId()),
-            format::money(b.total()),
-            toString(b.status()),
+            Formatter::money(b.total()),
+            billStatusName(b.status()),
         });
     }
-    int bw = tui::bannerOpen("SELECT BILL", "",
+    int bw = tui_.bannerOpen("SELECT BILL", "",
                              {"Home", "Billing", "Update Status"},
-                             tui::tableBoxWidth(bHeaders, bRows));
-    tui::tableInBox(bw, bHeaders, bRows);
+                             tui_.tableBoxWidth(bHeaders, bRows));
+    tui_.tableInBox(bw, bHeaders, bRows);
     std::cout << "\n";
-    int billId = validation::readInt("Bill id", 1, 1000000);
+    int billId = validation_.readInt("Bill id", 1, 1000000);
     Bill* bill = nullptr;
-    for (auto& b : hospital.bills()) {
+    for (auto& b : hospital_.bills()) {
         if (b.id() == billId) { bill = &b; break; }
     }
     if (!bill) throw NotFoundException("bill #" + std::to_string(billId));
 
-    char choice = tui::menu(
+    char choice = tui_.menu(
         "SET STATUS FOR BILL #" + std::to_string(bill->id()),
         {"Home", "Billing", "Update Status"},
         {
@@ -457,34 +442,33 @@ void updateBillStatus(Hospital& hospital) {
     else                    newStatus = BillStatus::Unpaid;
 
     if (bill->status() == newStatus) {
-        tui::toast("Bill is already " + toString(newStatus) + ".", tui::Level::Info);
-        tui::pause();
+        tui_.toast("Bill is already " + billStatusName(newStatus) + ".", Tui::Level::Info);
+        tui_.pause();
         return;
     }
 
     std::cout << "\n  Changing bill #" << bill->id() << " from "
-              << toString(bill->status()) << " to " << toString(newStatus) << "\n\n";
-    if (!tui::confirm("Confirm?")) {
-        tui::toast("No changes.", tui::Level::Info);
-        tui::pause();
+              << billStatusName(bill->status()) << " to " << billStatusName(newStatus) << "\n\n";
+    if (!tui_.confirm("Confirm?")) {
+        tui_.toast("No changes.", Tui::Level::Info);
+        tui_.pause();
         return;
     }
 
     bill->setStatus(newStatus);
-    hospital.saveAll();
-    logAudit(hospital.dataDir(), "BILL_STATUS_UPDATED",
-             "id=" + std::to_string(bill->id()) + " from=" + toString(bill->status()) +
-             " to=" + toString(newStatus));
-    tui::toast("Bill #" + std::to_string(bill->id()) + " marked as " +
-               toString(newStatus) + ".", tui::Level::Success);
-    tui::pause();
+    hospital_.saveAll();
+    logAudit(hospital_.dataDir(), "BILL_STATUS_UPDATED",
+             "id=" + std::to_string(bill->id()) + " from=" + billStatusName(bill->status()) +
+             " to=" + billStatusName(newStatus));
+    tui_.toast("Bill #" + std::to_string(bill->id()) + " marked as " +
+               billStatusName(newStatus) + ".", Tui::Level::Success);
+    tui_.pause();
 }
 
-}
 
-void run(Hospital& hospital) {
+void BillingModule::run() {
     while (true) {
-        char choice = tui::menu(
+        char choice = tui_.menu(
             "BILLING",
             {"Home", "Billing"},
             {
@@ -495,10 +479,10 @@ void run(Hospital& hospital) {
                 { 'B', "Back",              "return to main menu" },
             });
         switch (choice) {
-            case '1': newBill(hospital);        break;
-            case '2': viewBill(hospital);       break;
-            case '3': listBills(hospital);      break;
-            case '4': updateBillStatus(hospital); break;
+            case '1': newBill();        break;
+            case '2': viewBill();       break;
+            case '3': listBills();      break;
+            case '4': updateBillStatus(); break;
             case 'B': return;
         }
     }

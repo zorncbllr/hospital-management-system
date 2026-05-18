@@ -14,17 +14,10 @@
 #include <unordered_map>
 #include <vector>
 
-namespace hms::dispatch {
+namespace hms {
 
-namespace {
 
-struct ZoneGraph {
-    std::vector<std::string> nodes;
-    std::unordered_map<std::string, int> nodeIndex;
-    std::vector<std::vector<std::pair<int, int>>> adjacency;
-};
-
-ZoneGraph loadGraph(const std::string& path) {
+DispatchModule::ZoneGraph DispatchModule::loadGraph(const std::string& path) {
     ZoneGraph graph;
     std::ifstream in(path);
     if (!in) {
@@ -81,12 +74,7 @@ ZoneGraph loadGraph(const std::string& path) {
     return graph;
 }
 
-struct DijkstraResult {
-    std::vector<int> distance;
-    std::vector<int> previous;
-};
-
-DijkstraResult dijkstra(const ZoneGraph& graph, int source) {
+DispatchModule::DijkstraResult DispatchModule::dijkstra(const ZoneGraph& graph, int source) {
     const int n = static_cast<int>(graph.nodes.size());
     DijkstraResult result;
     result.distance.assign(n, std::numeric_limits<int>::max());
@@ -116,7 +104,7 @@ DijkstraResult dijkstra(const ZoneGraph& graph, int source) {
     return result;
 }
 
-std::vector<int> reconstructPath(const DijkstraResult& result, int target) {
+std::vector<int> DispatchModule::reconstructPath(const DijkstraResult& result, int target) {
     std::vector<int> path;
     if (result.distance[target] == std::numeric_limits<int>::max())
         return path;
@@ -127,7 +115,7 @@ std::vector<int> reconstructPath(const DijkstraResult& result, int target) {
     return path;
 }
 
-void showZones(const ZoneGraph& graph) {
+void DispatchModule::showZones(const ZoneGraph& graph) {
     std::vector<std::string> zHeaders{"#", "Zone", "Note"};
     std::vector<std::vector<std::string>> zRows;
     for (std::size_t i = 0; i < graph.nodes.size(); ++i) {
@@ -137,19 +125,19 @@ void showZones(const ZoneGraph& graph) {
             i == 0 ? "Ambulance station" : "",
         });
     }
-    int zw = tui::bannerOpen("AVAILABLE ZONES", "",
+    int zw = tui_.bannerOpen("AVAILABLE ZONES", "",
                              {"Home", "Ambulance Dispatch", "Request"},
-                             tui::tableBoxWidth(zHeaders, zRows));
-    tui::tableInBox(zw, zHeaders, zRows);
+                             tui_.tableBoxWidth(zHeaders, zRows));
+    tui_.tableInBox(zw, zHeaders, zRows);
 }
 
-void requestAmbulance(Hospital& hospital) {
-    ZoneGraph graph = loadGraph(hospital.graphPath());
+void DispatchModule::requestAmbulance() {
+    ZoneGraph graph = loadGraph(hospital_.graphPath());
 
-    tui::clearScreen();
+    tui_.clearScreen();
     showZones(graph);
 
-    int target = validation::readInt(
+    int target = validation_.readInt(
         "Destination zone number",
         0, static_cast<int>(graph.nodes.size()) - 1);
 
@@ -173,17 +161,17 @@ void requestAmbulance(Hospital& hospital) {
         {"ETA", std::to_string(result.distance[target]) + " minutes"},
         {"Path", pathStream.str()},
     };
-    int rw = tui::bannerOpen("ROUTE PLAN", "",
+    int rw = tui_.bannerOpen("ROUTE PLAN", "",
                              {"Home", "Ambulance Dispatch", "Request"},
-                             tui::tableBoxWidth(rHeaders, rRows));
-    tui::tableInBox(rw, rHeaders, rRows);
+                             tui_.tableBoxWidth(rHeaders, rRows));
+    tui_.tableInBox(rw, rHeaders, rRows);
     std::cout << "\n";
-    tui::pause();
+    tui_.pause();
 }
 
-void allDistances(Hospital& hospital) {
-    ZoneGraph graph = loadGraph(hospital.graphPath());
-    tui::clearScreen();
+void DispatchModule::allDistances() {
+    ZoneGraph graph = loadGraph(hospital_.graphPath());
+    tui_.clearScreen();
 
     DijkstraResult result = dijkstra(graph, 0);
     std::vector<std::string> headers{ "Zone", "ETA", "Route" };
@@ -200,19 +188,19 @@ void allDistances(Hospital& hospital) {
         }
         rows.push_back({ graph.nodes[i], distanceCell, pathStream.str() });
     }
-    int bw = tui::bannerOpen("DISTANCES FROM STATION", "fastest route to every zone",
+    int bw = tui_.bannerOpen("DISTANCES FROM STATION", "fastest route to every zone",
                              {"Home", "Ambulance Dispatch", "All Distances"},
-                             tui::tableBoxWidth(headers, rows, "Source: " + graph.nodes[0]));
-    tui::tableInBox(bw, headers, rows, "Source: " + graph.nodes[0]);
+                             tui_.tableBoxWidth(headers, rows, "Source: " + graph.nodes[0]));
+    tui_.tableInBox(bw, headers, rows, "Source: " + graph.nodes[0]);
     std::cout << "\n";
-    tui::pause();
+    tui_.pause();
 }
 
-void showGraph(Hospital& hospital) {
-    ZoneGraph graph = loadGraph(hospital.graphPath());
+void DispatchModule::showGraph() {
+    ZoneGraph graph = loadGraph(hospital_.graphPath());
 
-    tui::clearScreen();
-    tui::banner("ZONE GRAPH", "nodes and edges", {"Home", "Ambulance Dispatch", "View Graph"});
+    tui_.clearScreen();
+    tui_.banner("ZONE GRAPH", "nodes and edges", {"Home", "Ambulance Dispatch", "View Graph"});
     std::cout << "\n";
 
     showZones(graph);
@@ -230,19 +218,18 @@ void showGraph(Hospital& hospital) {
             });
         }
     }
-    int ew = tui::bannerOpen("EDGES", "",
+    int ew = tui_.bannerOpen("EDGES", "",
                              {"Home", "Ambulance Dispatch", "View Graph"},
-                             tui::tableBoxWidth(eHeaders, eRows));
-    tui::tableInBox(ew, eHeaders, eRows);
+                             tui_.tableBoxWidth(eHeaders, eRows));
+    tui_.tableInBox(ew, eHeaders, eRows);
     std::cout << "\n";
-    tui::pause();
+    tui_.pause();
 }
 
-}
 
-void run(Hospital& hospital) {
+void DispatchModule::run() {
     while (true) {
-        char choice = tui::menu(
+        char choice = tui_.menu(
             "AMBULANCE DISPATCH",
             {"Home", "Ambulance Dispatch"},
             {
@@ -252,9 +239,9 @@ void run(Hospital& hospital) {
                 { 'B', "Back",               "return to main menu" },
             });
         switch (choice) {
-            case '1': requestAmbulance(hospital); break;
-            case '2': allDistances(hospital);     break;
-            case '3': showGraph(hospital);        break;
+            case '1': requestAmbulance(); break;
+            case '2': allDistances();     break;
+            case '3': showGraph();        break;
             case 'B': return;
         }
     }

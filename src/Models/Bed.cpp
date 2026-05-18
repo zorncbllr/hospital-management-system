@@ -13,7 +13,7 @@ std::string Bed::csvHeader() {
 std::string Bed::toCSV() const {
     std::ostringstream out;
     out << id_
-        << "|" << csv::escape(ward_)
+        << "|" << CsvCodec::escape(ward_)
         << "|" << occupantId_
         << "|" << dailyRate_
         << "|" << static_cast<long long>(admitDate_);
@@ -21,7 +21,7 @@ std::string Bed::toCSV() const {
 }
 
 Bed Bed::fromCSV(const std::string& line) {
-    auto fields = csv::split(line);
+    auto fields = CsvCodec::split(line);
     if (fields.size() < 5)
         throw FileException("bed row has too few fields");
     Bed b;

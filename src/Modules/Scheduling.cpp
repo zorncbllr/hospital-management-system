@@ -14,19 +14,18 @@
 #include <sstream>
 #include <vector>
 
-namespace hms::scheduling {
+namespace hms {
 
-namespace {
 
 constexpr int CLINIC_OPEN_MIN  = 8 * 60;
 constexpr int CLINIC_CLOSE_MIN = 18 * 60;
 
-bool sameDay(std::time_t a, std::time_t b) {
+bool SchedulingModule::sameDay(std::time_t a, std::time_t b) {
     constexpr int SECS_PER_DAY = 86400;
     return (a / SECS_PER_DAY) == (b / SECS_PER_DAY);
 }
 
-bool isBusinessDay(std::time_t day) {
+bool SchedulingModule::isBusinessDay(std::time_t day) {
     std::tm tm{};
 #ifdef _WIN32
     localtime_s(&tm, &day);
@@ -37,7 +36,7 @@ bool isBusinessDay(std::time_t day) {
     return (wday >= 1 && wday <= 5);
 }
 
-std::string dayOfWeekLabel(std::time_t day) {
+std::string SchedulingModule::dayOfWeekLabel(std::time_t day) {
     std::tm tm{};
 #ifdef _WIN32
     localtime_s(&tm, &day);
@@ -51,10 +50,10 @@ std::string dayOfWeekLabel(std::time_t day) {
     return labels[tm.tm_wday];
 }
 
-std::vector<Appointment*> appointmentsFor(
-    Hospital& hospital, int doctorId, std::time_t day) {
+std::vector<Appointment*> SchedulingModule::appointmentsFor(
+    int doctorId, std::time_t day) {
     std::vector<Appointment*> matches;
-    for (auto& appointment : hospital.appointments()) {
+    for (auto& appointment : hospital_.appointments()) {
         if (appointment.doctorId() != doctorId) continue;
         if (appointment.date() != day) continue;
         if (appointment.status() == AppointmentStatus::Cancelled) continue;
@@ -67,7 +66,7 @@ std::vector<Appointment*> appointmentsFor(
     return matches;
 }
 
-bool hasConflict(const std::vector<Appointment*>& existing,
+bool SchedulingModule::hasConflict(const std::vector<Appointment*>& existing,
                  int startMinutes, int endMinutes) {
     for (Appointment* appointment : existing) {
         if (startMinutes < appointment->endMinutes() &&
@@ -78,10 +77,9 @@ bool hasConflict(const std::vector<Appointment*>& existing,
     return false;
 }
 
-std::vector<Appointment*> filterAppointments(
+std::vector<Appointment*> SchedulingModule::filterAppointments(
     const std::vector<Appointment*>& all,
-    const std::string& query,
-    Hospital& hospital) {
+    const std::string& query) {
     
     std::vector<Appointment*> result;
     if (query.empty()) return all;
@@ -93,7 +91,7 @@ std::vector<Appointment*> filterAppointments(
     for (auto* apt : all) {
         bool match = false;
         
-        Patient* patient = hospital.findPatient(apt->patientId());
+        Patient* patient = hospital_.findPatient(apt->patientId());
         if (patient) {
             std::string lowerName = patient->name();
             std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(),
@@ -102,7 +100,7 @@ std::vector<Appointment*> filterAppointments(
         }
         
         if (!match) {
-            Doctor* doctor = hospital.findDoctor(apt->doctorId());
+            Doctor* doctor = hospital_.findDoctor(apt->doctorId());
             if (doctor) {
                 std::string lowerName = doctor->name();
                 std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(),
@@ -119,7 +117,7 @@ std::vector<Appointment*> filterAppointments(
         }
         
         if (!match) {
-            std::string dateStr = validation::formatDate(apt->date());
+            std::string dateStr = Validator::formatDate(apt->date());
             std::string lowerDate = dateStr;
             std::transform(lowerDate.begin(), lowerDate.end(), lowerDate.begin(),
                 [](char c) { return std::tolower(static_cast<unsigned char>(c)); });
@@ -132,7 +130,7 @@ std::vector<Appointment*> filterAppointments(
     return result;
 }
 
-int findNextFreeSlot(const std::vector<Appointment*>& existing,
+int SchedulingModule::findNextFreeSlot(const std::vector<Appointment*>& existing,
                      int durationMinutes,
                      int afterMinutes) {
     int cursor = std::max(afterMinutes, CLINIC_OPEN_MIN);
@@ -147,34 +145,34 @@ int findNextFreeSlot(const std::vector<Appointment*>& existing,
     return -1;
 }
 
-void showDailySchedule(Hospital& hospital) {
-    if (hospital.doctors().empty()) {
-        tui::toast("No doctors in the system yet.", tui::Level::Warning);
-        tui::pause();
+void SchedulingModule::showDailySchedule() {
+    if (hospital_.doctors().empty()) {
+        tui_.toast("No doctors in the system yet.", Tui::Level::Warning);
+        tui_.pause();
         return;
     }
-    tui::clearScreen();
-    tui::banner("APPOINTMENT SCHEDULE", "", {"Home", "Appointments", "View"});
+    tui_.clearScreen();
+    tui_.banner("APPOINTMENT SCHEDULE", "", {"Home", "Appointments", "View"});
     std::cout << "\n";
 
     std::vector<std::string> dHeaders{"ID", "Name", "Specialty"};
     std::vector<std::vector<std::string>> dRows;
-    for (const auto& doctor : hospital.doctors()) {
+    for (const auto& doctor : hospital_.doctors()) {
         dRows.push_back({
             std::to_string(doctor.id()), doctor.name(), doctor.specialty(),
         });
     }
-    int dw = tui::bannerOpen("SELECT DOCTOR", "",
+    int dw = tui_.bannerOpen("SELECT DOCTOR", "",
                              {"Home", "Appointments", "View"},
-                             tui::tableBoxWidth(dHeaders, dRows));
-    tui::tableInBox(dw, dHeaders, dRows);
+                             tui_.tableBoxWidth(dHeaders, dRows));
+    tui_.tableInBox(dw, dHeaders, dRows);
     std::cout << "\n";
-    int doctorId = validation::readInt("Doctor id", 1, 1000000);
-    Doctor* doctor = hospital.findDoctor(doctorId);
+    int doctorId = validation_.readInt("Doctor id", 1, 1000000);
+    Doctor* doctor = hospital_.findDoctor(doctorId);
     if (!doctor) throw NotFoundException("doctor #" + std::to_string(doctorId));
 
     std::vector<Appointment*> allAppointments;
-    for (auto& appointment : hospital.appointments()) {
+    for (auto& appointment : hospital_.appointments()) {
         if (appointment.doctorId() != doctorId) continue;
         if (appointment.status() == AppointmentStatus::Cancelled) continue;
         allAppointments.push_back(&appointment);
@@ -186,11 +184,11 @@ void showDailySchedule(Hospital& hospital) {
                   return a->startMinutes() < b->startMinutes();
               });
 
-    std::time_t viewDate = validation::today();
+    std::time_t viewDate = Validator::today();
     std::string query;
 
     while (true) {
-        tui::clearScreen();
+        tui_.clearScreen();
 
         std::vector<Appointment*> dateFiltered;
         for (auto* apt : allAppointments) {
@@ -199,7 +197,7 @@ void showDailySchedule(Hospital& hospital) {
             }
         }
 
-        auto filtered = filterAppointments(dateFiltered, query, hospital);
+        auto filtered = filterAppointments(dateFiltered, query);
 
         std::string title = query.empty() ? "APPOINTMENTS"
             : "APPOINTMENTS MATCHING \"" + query + "\"";
@@ -208,41 +206,41 @@ void showDailySchedule(Hospital& hospital) {
         std::vector<std::vector<std::string>> rows;
 
         for (auto* appointment : filtered) {
-            Patient* patient = hospital.findPatient(appointment->patientId());
+            Patient* patient = hospital_.findPatient(appointment->patientId());
             rows.push_back({
                 "#" + std::to_string(appointment->id()),
-                validation::formatTime(appointment->startMinutes() * 60) + " - " +
-                    validation::formatTime(appointment->endMinutes() * 60),
+                Validator::formatTime(appointment->startMinutes() * 60) + " - " +
+                    Validator::formatTime(appointment->endMinutes() * 60),
                 patient ? patient->name() : "(unknown)",
                 appointment->reason(),
                 std::string(statusColor(appointment->status())) +
-                    toString(appointment->status()) + tui::color::RESET,
+                    toString(appointment->status()) + Tui::Color::RESET,
             });
         }
 
         std::string sectionTitle = "Dr. " + doctor->name() + "  •  " +
-                                   validation::formatDate(viewDate) + "  •  " +
+                                   Validator::formatDate(viewDate) + "  •  " +
                                    std::to_string(filtered.size()) + " appointments";
-        int bw = tui::bannerOpen(title, "", {"Home", "Appointments", "View"},
-                                 tui::tableBoxWidth(headers, rows, sectionTitle));
-        tui::tableInBox(bw, headers, rows, sectionTitle);
+        int bw = tui_.bannerOpen(title, "", {"Home", "Appointments", "View"},
+                                 tui_.tableBoxWidth(headers, rows, sectionTitle));
+        tui_.tableInBox(bw, headers, rows, sectionTitle);
         std::cout << "\n";
 
         std::string prompt = "[Enter] Back";
         if (!query.empty()) prompt += "  [C] Clear";
         prompt += "  [type to filter]";
-        std::string input = validation::readLine(prompt, true);
+        std::string input = validation_.readLine(prompt, true);
 
         if (input.empty()) return;
 
         if ((input == "c" || input == "C") && !query.empty()) {
             query.clear();
-            viewDate = validation::today();
+            viewDate = Validator::today();
             continue;
         }
 
         try {
-            std::time_t parsedDate = validation::parseDate(input);
+            std::time_t parsedDate = Validator::parseDate(input);
             viewDate = parsedDate;
             query.clear();
             continue;
@@ -253,37 +251,37 @@ void showDailySchedule(Hospital& hospital) {
     }
 }
 
-void bookAppointment(Hospital& hospital) {
-    if (hospital.patients().empty())
+void SchedulingModule::bookAppointment() {
+    if (hospital_.patients().empty())
         throw NotFoundException("no patients yet — register one first");
-    if (hospital.doctors().empty())
+    if (hospital_.doctors().empty())
         throw NotFoundException("no doctors available");
 
-    tui::clearScreen();
-    tui::banner("BOOK APPOINTMENT", "automatic conflict detection", {"Home", "Appointments", "Book"});
+    tui_.clearScreen();
+    tui_.banner("BOOK APPOINTMENT", "automatic conflict detection", {"Home", "Appointments", "Book"});
     std::cout << "\n";
 
     std::vector<std::string> pHeaders{"ID", "Name", "Age", "Sex"};
     std::vector<std::vector<std::string>> pRows;
-    for (const auto& patient : hospital.patients()) {
+    for (const auto& patient : hospital_.patients()) {
         std::string sx = (patient.sex() == 'M' || patient.sex() == 'm') ? "Male" : "Female";
         pRows.push_back({
             std::to_string(patient.id()), patient.name(),
             std::to_string(patient.age()), sx,
         });
     }
-    int pw = tui::bannerOpen("SELECT PATIENT", "",
+    int pw = tui_.bannerOpen("SELECT PATIENT", "",
                              {"Home", "Appointments", "Book"},
-                             tui::tableBoxWidth(pHeaders, pRows));
-    tui::tableInBox(pw, pHeaders, pRows);
+                             tui_.tableBoxWidth(pHeaders, pRows));
+    tui_.tableInBox(pw, pHeaders, pRows);
     std::cout << "\n";
-    int patientId = validation::readInt("Patient id", 1, 1000000);
-    Patient* patient = hospital.findPatient(patientId);
+    int patientId = validation_.readInt("Patient id", 1, 1000000);
+    Patient* patient = hospital_.findPatient(patientId);
     if (!patient) throw NotFoundException("patient #" + std::to_string(patientId));
 
     std::vector<std::string> dHeaders{"ID", "Name", "Specialty", "Fee"};
     std::vector<std::vector<std::string>> dRows;
-    for (const auto& doctor : hospital.doctors()) {
+    for (const auto& doctor : hospital_.doctors()) {
         std::ostringstream feeStr;
         feeStr << "P" << std::fixed << std::setprecision(2) << doctor.consultFee();
         dRows.push_back({
@@ -291,16 +289,16 @@ void bookAppointment(Hospital& hospital) {
             doctor.specialty(), feeStr.str(),
         });
     }
-    int dw = tui::bannerOpen("SELECT DOCTOR", "",
+    int dw = tui_.bannerOpen("SELECT DOCTOR", "",
                              {"Home", "Appointments", "Book"},
-                             tui::tableBoxWidth(dHeaders, dRows));
-    tui::tableInBox(dw, dHeaders, dRows);
+                             tui_.tableBoxWidth(dHeaders, dRows));
+    tui_.tableInBox(dw, dHeaders, dRows);
     std::cout << "\n";
-    int doctorId = validation::readInt("Doctor id", 1, 1000000);
-    Doctor* doctor = hospital.findDoctor(doctorId);
+    int doctorId = validation_.readInt("Doctor id", 1, 1000000);
+    Doctor* doctor = hospital_.findDoctor(doctorId);
     if (!doctor) throw NotFoundException("doctor #" + std::to_string(doctorId));
 
-    std::time_t day = validation::readDate("Appointment date");
+    std::time_t day = validation_.readDate("Appointment date");
 
     if (!isBusinessDay(day)) {
         throw InvalidInputException(
@@ -308,15 +306,15 @@ void bookAppointment(Hospital& hospital) {
             ". Business days are Monday through Friday.");
     }
 
-    int startMinutesOfDay = validation::readTimeOfDay("Start time") / 60;
-    int endMinutesOfDay = validation::readTimeOfDay("End time") / 60;
+    int startMinutesOfDay = validation_.readTimeOfDay("Start time") / 60;
+    int endMinutesOfDay = validation_.readTimeOfDay("End time") / 60;
     int duration = endMinutesOfDay - startMinutesOfDay;
 
     if (startMinutesOfDay < CLINIC_OPEN_MIN || endMinutesOfDay > CLINIC_CLOSE_MIN) {
         throw InvalidInputException(
             "clinic hours are " +
-            validation::formatTime(CLINIC_OPEN_MIN * 60) + " to " +
-            validation::formatTime(CLINIC_CLOSE_MIN * 60));
+            Validator::formatTime(CLINIC_OPEN_MIN * 60) + " to " +
+            Validator::formatTime(CLINIC_CLOSE_MIN * 60));
     }
 
     if (duration <= 0) {
@@ -327,7 +325,7 @@ void bookAppointment(Hospital& hospital) {
         throw InvalidInputException("appointment must be between 5 and 240 minutes");
     }
 
-    auto existing = appointmentsFor(hospital, doctorId, day);
+    auto existing = appointmentsFor(doctorId, day);
     if (static_cast<int>(existing.size()) >= doctor->dailyAppointmentLimit()) {
         throw CapacityException(
             "Dr. " + doctor->name() + " already has " +
@@ -342,169 +340,169 @@ void bookAppointment(Hospital& hospital) {
         message << "Time conflicts with another appointment.";
         if (suggestedStart >= 0) {
             message << " Next free slot: "
-                    << validation::formatTime(suggestedStart * 60)
+                    << Validator::formatTime(suggestedStart * 60)
                     << " - "
-                    << validation::formatTime((suggestedStart + duration) * 60);
+                    << Validator::formatTime((suggestedStart + duration) * 60);
         } else {
             message << " No free slot remaining that day.";
         }
-        tui::toast(message.str(), tui::Level::Warning);
-        if (suggestedStart >= 0 && tui::confirm("Use the suggested time?")) {
+        tui_.toast(message.str(), Tui::Level::Warning);
+        if (suggestedStart >= 0 && tui_.confirm("Use the suggested time?")) {
             startMinutesOfDay = suggestedStart;
             endMinutesOfDay = suggestedStart + duration;
         } else {
-            tui::pause();
+            tui_.pause();
             return;
         }
     }
 
-    std::string reason = validation::readLine("Reason for visit", true);
+    std::string reason = validation_.readLine("Reason for visit", true);
 
     Appointment appointment(
-        hospital.nextAppointmentId(), patientId, doctorId, day,
+        hospital_.nextAppointmentId(), patientId, doctorId, day,
         startMinutesOfDay, endMinutesOfDay, reason);
-    hospital.appointments().push_back(appointment);
-    hospital.saveAll();
+    hospital_.appointments().push_back(appointment);
+    hospital_.saveAll();
 
-    tui::toast(
+    tui_.toast(
         "Booked: " + patient->name() + " with Dr. " + doctor->name() +
-        " on " + validation::formatDate(day) + " " +
-        validation::formatTime(startMinutesOfDay * 60),
-        tui::Level::Success);
-    tui::pause();
+        " on " + Validator::formatDate(day) + " " +
+        Validator::formatTime(startMinutesOfDay * 60),
+        Tui::Level::Success);
+    tui_.pause();
 }
 
-void cancelAppointment(Hospital& hospital) {
-    tui::clearScreen();
-    tui::banner("CANCEL APPOINTMENT", "", {"Home", "Appointments", "Cancel"});
+void SchedulingModule::cancelAppointment() {
+    tui_.clearScreen();
+    tui_.banner("CANCEL APPOINTMENT", "", {"Home", "Appointments", "Cancel"});
     std::cout << "\n";
 
     std::vector<std::string> aHeaders{"Apt#", "Patient", "Doctor", "Date", "Time", "Status"};
     std::vector<std::vector<std::string>> aRows;
-    for (const auto& apt : hospital.appointments()) {
+    for (const auto& apt : hospital_.appointments()) {
         if (apt.status() == AppointmentStatus::Cancelled) continue;
-        Patient* p = hospital.findPatient(apt.patientId());
-        Doctor* d = hospital.findDoctor(apt.doctorId());
+        Patient* p = hospital_.findPatient(apt.patientId());
+        Doctor* d = hospital_.findDoctor(apt.doctorId());
         aRows.push_back({
             "#" + std::to_string(apt.id()),
             p ? p->name() : "?",
             d ? std::string("Dr. ") + d->name() : "?",
-            validation::formatDate(apt.date()),
-            validation::formatTime(apt.startMinutes() * 60),
+            Validator::formatDate(apt.date()),
+            Validator::formatTime(apt.startMinutes() * 60),
             toString(apt.status()),
         });
     }
-    int aw = tui::bannerOpen("SELECT APPOINTMENT", "",
+    int aw = tui_.bannerOpen("SELECT APPOINTMENT", "",
                              {"Home", "Appointments", "Cancel"},
-                             tui::tableBoxWidth(aHeaders, aRows));
-    tui::tableInBox(aw, aHeaders, aRows);
+                             tui_.tableBoxWidth(aHeaders, aRows));
+    tui_.tableInBox(aw, aHeaders, aRows);
     std::cout << "\n";
-    int id = validation::readInt("Appointment id", 1, 1000000);
-    for (auto& appointment : hospital.appointments()) {
+    int id = validation_.readInt("Appointment id", 1, 1000000);
+    for (auto& appointment : hospital_.appointments()) {
         if (appointment.id() == id) {
             if (appointment.status() == AppointmentStatus::Cancelled) {
-                tui::toast("Already cancelled.", tui::Level::Info);
+                tui_.toast("Already cancelled.", Tui::Level::Info);
             } else {
-                if (!tui::confirm("Cancel this appointment?")) {
-                    tui::toast("Cancelled.", tui::Level::Info);
-                    tui::pause();
+                if (!tui_.confirm("Cancel this appointment?")) {
+                    tui_.toast("Cancelled.", Tui::Level::Info);
+                    tui_.pause();
                     return;
                 }
                 appointment.setStatus(AppointmentStatus::Cancelled);
-                hospital.saveAll();
-                tui::toast("Cancelled.", tui::Level::Success);
+                hospital_.saveAll();
+                tui_.toast("Cancelled.", Tui::Level::Success);
             }
-            tui::pause();
+            tui_.pause();
             return;
         }
     }
     throw NotFoundException("appointment #" + std::to_string(id));
 }
 
-void markCompleted(Hospital& hospital) {
-    tui::clearScreen();
-    tui::banner("MARK APPOINTMENT COMPLETED", "", {"Home", "Appointments", "Complete"});
+void SchedulingModule::markCompleted() {
+    tui_.clearScreen();
+    tui_.banner("MARK APPOINTMENT COMPLETED", "", {"Home", "Appointments", "Complete"});
     std::cout << "\n";
 
     std::vector<std::string> aHeaders{"Apt#", "Patient", "Doctor", "Date", "Time", "Status"};
     std::vector<std::vector<std::string>> aRows;
-    for (const auto& apt : hospital.appointments()) {
+    for (const auto& apt : hospital_.appointments()) {
         if (apt.status() != AppointmentStatus::Scheduled) continue;
-        Patient* p = hospital.findPatient(apt.patientId());
-        Doctor* d = hospital.findDoctor(apt.doctorId());
+        Patient* p = hospital_.findPatient(apt.patientId());
+        Doctor* d = hospital_.findDoctor(apt.doctorId());
         aRows.push_back({
             "#" + std::to_string(apt.id()),
             p ? p->name() : "?",
             d ? std::string("Dr. ") + d->name() : "?",
-            validation::formatDate(apt.date()),
-            validation::formatTime(apt.startMinutes() * 60),
+            Validator::formatDate(apt.date()),
+            Validator::formatTime(apt.startMinutes() * 60),
             toString(apt.status()),
         });
     }
-    int aw = tui::bannerOpen("SELECT APPOINTMENT", "",
+    int aw = tui_.bannerOpen("SELECT APPOINTMENT", "",
                              {"Home", "Appointments", "Complete"},
-                             tui::tableBoxWidth(aHeaders, aRows));
-    tui::tableInBox(aw, aHeaders, aRows);
+                             tui_.tableBoxWidth(aHeaders, aRows));
+    tui_.tableInBox(aw, aHeaders, aRows);
     std::cout << "\n";
-    int id = validation::readInt("Appointment id", 1, 1000000);
-    for (auto& appointment : hospital.appointments()) {
+    int id = validation_.readInt("Appointment id", 1, 1000000);
+    for (auto& appointment : hospital_.appointments()) {
         if (appointment.id() == id) {
             appointment.setStatus(AppointmentStatus::Completed);
-            hospital.saveAll();
-            tui::toast("Marked completed.", tui::Level::Success);
-            tui::pause();
+            hospital_.saveAll();
+            tui_.toast("Marked completed.", Tui::Level::Success);
+            tui_.pause();
             return;
         }
     }
     throw NotFoundException("appointment #" + std::to_string(id));
 }
 
-void suggestNextFreeSlot(Hospital& hospital) {
-    if (hospital.doctors().empty()) {
-        tui::toast("No doctors in the system yet.", tui::Level::Warning);
-        tui::pause();
+void SchedulingModule::suggestNextFreeSlot() {
+    if (hospital_.doctors().empty()) {
+        tui_.toast("No doctors in the system yet.", Tui::Level::Warning);
+        tui_.pause();
         return;
     }
-    tui::clearScreen();
-    tui::banner("FIND NEXT FREE SLOT", "", {"Home", "Appointments", "Find Slot"});
+    tui_.clearScreen();
+    tui_.banner("FIND NEXT FREE SLOT", "", {"Home", "Appointments", "Find Slot"});
     std::cout << "\n";
 
     std::vector<std::string> dHeaders{"ID", "Name", "Specialty"};
     std::vector<std::vector<std::string>> dRows;
-    for (const auto& doctor : hospital.doctors()) {
+    for (const auto& doctor : hospital_.doctors()) {
         dRows.push_back({
             std::to_string(doctor.id()), doctor.name(), doctor.specialty(),
         });
     }
-    int dw = tui::bannerOpen("SELECT DOCTOR", "",
+    int dw = tui_.bannerOpen("SELECT DOCTOR", "",
                              {"Home", "Appointments", "Find Slot"},
-                             tui::tableBoxWidth(dHeaders, dRows));
-    tui::tableInBox(dw, dHeaders, dRows);
+                             tui_.tableBoxWidth(dHeaders, dRows));
+    tui_.tableInBox(dw, dHeaders, dRows);
     std::cout << "\n";
-    int doctorId = validation::readInt("Doctor id", 1, 1000000);
-    Doctor* doctor = hospital.findDoctor(doctorId);
+    int doctorId = validation_.readInt("Doctor id", 1, 1000000);
+    Doctor* doctor = hospital_.findDoctor(doctorId);
     if (!doctor) throw NotFoundException("doctor #" + std::to_string(doctorId));
 
-    int duration = validation::readDuration("Duration", 5, 240);
+    int duration = validation_.readDuration("Duration", 5, 240);
 
-    std::time_t searchDate = validation::today();
+    std::time_t searchDate = Validator::today();
     int businessDaysSearched = 0;
     const int maxBusinessDaysToSearch = 30;
 
     while (businessDaysSearched < maxBusinessDaysToSearch) {
         if (isBusinessDay(searchDate)) {
-            auto existing = appointmentsFor(hospital, doctorId, searchDate);
+            auto existing = appointmentsFor(doctorId, searchDate);
 
             if (static_cast<int>(existing.size()) < doctor->dailyAppointmentLimit()) {
                 int suggested = findNextFreeSlot(existing, duration, CLINIC_OPEN_MIN);
                 if (suggested >= 0) {
                     std::ostringstream message;
                     message << "Next free slot: "
-                            << validation::formatDate(searchDate) << " "
-                            << validation::formatTime(suggested * 60) << " - "
-                            << validation::formatTime((suggested + duration) * 60);
-                    tui::toast(message.str(), tui::Level::Success);
-                    tui::pause();
+                            << Validator::formatDate(searchDate) << " "
+                            << Validator::formatTime(suggested * 60) << " - "
+                            << Validator::formatTime((suggested + duration) * 60);
+                    tui_.toast(message.str(), Tui::Level::Success);
+                    tui_.pause();
                     return;
                 }
             }
@@ -514,16 +512,15 @@ void suggestNextFreeSlot(Hospital& hospital) {
         searchDate += 86400;
     }
 
-    tui::toast("No free slot found in the next " + std::to_string(maxBusinessDaysToSearch) + " business days.",
-               tui::Level::Warning);
-    tui::pause();
+    tui_.toast("No free slot found in the next " + std::to_string(maxBusinessDaysToSearch) + " business days.",
+               Tui::Level::Warning);
+    tui_.pause();
 }
 
-}
 
-void run(Hospital& hospital) {
+void SchedulingModule::run() {
     while (true) {
-        char choice = tui::menu(
+        char choice = tui_.menu(
             "APPOINTMENTS",
             {"Home", "Appointments"},
             {
@@ -535,11 +532,11 @@ void run(Hospital& hospital) {
                 { 'B', "Back",                  "return to main menu" },
             });
         switch (choice) {
-            case '1': showDailySchedule(hospital);    break;
-            case '2': bookAppointment(hospital);      break;
-            case '3': suggestNextFreeSlot(hospital);  break;
-            case '4': cancelAppointment(hospital);    break;
-            case '5': markCompleted(hospital);        break;
+            case '1': showDailySchedule();    break;
+            case '2': bookAppointment();      break;
+            case '3': suggestNextFreeSlot();  break;
+            case '4': cancelAppointment();    break;
+            case '5': markCompleted();        break;
             case 'B': return;
         }
     }

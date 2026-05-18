@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(hospital
     src/main.cpp
+    src/Application.cpp
     src/Hospital.cpp
     src/Core/Tui.cpp
     src/Core/Validation.cpp

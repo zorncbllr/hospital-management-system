@@ -20,20 +20,20 @@ std::string Doctor::csvHeader() {
 std::string Doctor::toCSV() const {
     std::ostringstream out;
     out << id_
-        << "|" << csv::escape(name_)
+        << "|" << CsvCodec::escape(name_)
         << "|" << age_
         << "|" << sex_
-        << "|" << csv::escape(contact_)
-        << "|" << csv::escape(address_)
-        << "|" << csv::escape(specialty_)
-        << "|" << csv::escape(room_)
+        << "|" << CsvCodec::escape(contact_)
+        << "|" << CsvCodec::escape(address_)
+        << "|" << CsvCodec::escape(specialty_)
+        << "|" << CsvCodec::escape(room_)
         << "|" << consultFee_
         << "|" << dailyAppointmentLimit_;
     return out.str();
 }
 
 Doctor Doctor::fromCSV(const std::string& line) {
-    auto fields = csv::split(line);
+    auto fields = CsvCodec::split(line);
     if (fields.size() < 10)
         throw FileException("doctor row has too few fields");
     Doctor d;
